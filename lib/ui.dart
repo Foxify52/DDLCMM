@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ddlcmm/utils.dart';
 import 'package:ddlcmm/global.dart' as global;
+import 'package:url_launcher/url_launcher.dart';
 
 class ModList extends StatefulWidget {
   const ModList({super.key});
@@ -40,7 +41,7 @@ class _ModListState extends State<ModList> {
             'Description': 'Placeholder',
             'Author': 'Placeholder',
             'Version': '1.0.0',
-            'Image': '',
+            'Image': 'assets/Logo.webp',
             'Source': '',
           }));
         }
@@ -78,6 +79,10 @@ class _ModListState extends State<ModList> {
 
   @override
   Widget build(BuildContext context) {
+    List<String> modInfo = [];
+    if (_selectedMod != null) {
+      modInfo = utils.getModData(_selectedMod);
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('DDLC Mods'),
@@ -94,13 +99,119 @@ class _ModListState extends State<ModList> {
                 margin: const EdgeInsets.all(8.0),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    utils.getModData(_selectedMod),
-                    textAlign: TextAlign.left,
-                    style: const TextStyle(
-                      fontSize: 18.0,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        textAlign: TextAlign.left,
+                        softWrap: true,
+                        TextSpan(
+                          text: 'Name: ',
+                          style: const TextStyle(
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: modInfo[0],
+                              style: const TextStyle(
+                                fontSize: 18.0,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text.rich(
+                        textAlign: TextAlign.left,
+                        softWrap: true,
+                        TextSpan(
+                          text: 'Description: ',
+                          style: const TextStyle(
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: modInfo[1],
+                              style: const TextStyle(
+                                fontSize: 18.0,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text.rich(
+                        textAlign: TextAlign.left,
+                        softWrap: true,
+                        TextSpan(
+                          text: 'Author: ',
+                          style: const TextStyle(
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: modInfo[2],
+                              style: const TextStyle(
+                                fontSize: 18.0,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text.rich(
+                        textAlign: TextAlign.left,
+                        softWrap: true,
+                        TextSpan(
+                          text: 'Version: ',
+                          style: const TextStyle(
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: modInfo[3],
+                              style: const TextStyle(
+                                fontSize: 18.0,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (modInfo[5] != '')
+                        InkWell(
+                          child: Text.rich(
+                            textAlign: TextAlign.left,
+                            softWrap: true,
+                            TextSpan(
+                              text: 'Source: ',
+                              style: const TextStyle(
+                                fontSize: 18.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: modInfo[5],
+                                  style: const TextStyle(
+                                    color: Colors.blue,
+                                    fontSize: 18.0,
+                                    fontWeight: FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          onTap: () => launchUrl(
+                            Uri.parse(
+                              modInfo[5],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -111,7 +222,7 @@ class _ModListState extends State<ModList> {
                   final Map<String, dynamic> mod = _mods[index];
                   return ListTile(
                     leading: CircleAvatar(
-                      child: Image.asset('assets/Logo.webp'),
+                      child: Image.asset(mod['Image']),
                     ),
                     title: Text(mod['Name']),
                     subtitle: Text(mod['Description']),

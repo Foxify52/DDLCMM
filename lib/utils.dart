@@ -10,16 +10,13 @@ class ModUtils {
     windowManager.show();
   }
 
-  String getModData(selectedMod) {
+  List<String> getModData(selectedMod) {
     Map<String, dynamic> jsonData = selectedMod;
     List<String> data = [];
     jsonData.forEach((key, value) {
-      if (key != 'Image') {
-        data.add('$key: $value');
-      }
+      data.add(value);
     });
-    String result = data.join('\n');
-    return result;
+    return data;
   }
 
   void copyMod(String modName) {
