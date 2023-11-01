@@ -14,10 +14,10 @@ class ModList extends StatefulWidget {
 }
 
 class _ModListState extends State<ModList> {
-  List<Map<String, dynamic>> _mods = [];
+  List<Map<String, dynamic>> _mods = <Map<String, dynamic>>[];
   Map<String, dynamic>? _selectedMod;
   SharedPreferences? _prefs;
-  final utils = ModUtils();
+  final ModUtils utils = ModUtils();
 
   @override
   void initState() {
@@ -27,7 +27,7 @@ class _ModListState extends State<ModList> {
 
   Future<void> _initMods() async {
     final List<FileSystemEntity> modFolders = global.modDir.listSync();
-    final List<Map<String, dynamic>> mods = [];
+    final List<Map<String, dynamic>> mods = <Map<String, dynamic>>[];
 
     for (final FileSystemEntity folder in modFolders) {
       if (folder is Directory) {
@@ -36,14 +36,16 @@ class _ModListState extends State<ModList> {
 
         if (!jsonFile.existsSync()) {
           jsonFile.createSync();
-          jsonFile.writeAsStringSync(json.encode({
-            'Name': folderName.replaceAll("mod\\", ""),
-            'Description': 'Placeholder',
-            'Author': 'Placeholder',
-            'Version': '1.0.0',
-            'Image': 'assets/Logo.webp',
-            'Source': '',
-          }));
+          jsonFile.writeAsStringSync(
+            json.encode(<String, String>{
+              'Name': folderName.replaceAll('mod\\', ''),
+              'Description': 'Placeholder',
+              'Author': 'Placeholder',
+              'Version': '1.0.0',
+              'Image': 'assets/Logo.webp',
+              'Source': '',
+            }),
+          );
         }
 
         final Map<String, dynamic> modData =
@@ -60,7 +62,8 @@ class _ModListState extends State<ModList> {
       try {
         if (savedModName != null) {
           _selectedMod = mods.firstWhere(
-              (Map<String, dynamic> mod) => mod['Name'] == savedModName);
+            (Map<String, dynamic> mod) => mod['Name'] == savedModName,
+          );
         }
       } catch (e) {
         _selectedMod = null;
@@ -79,9 +82,9 @@ class _ModListState extends State<ModList> {
 
   @override
   Widget build(BuildContext context) {
-    List<String> modInfo = [];
+    List<String> modInfo = <String>[];
     if (_selectedMod != null) {
-      modInfo = utils.getModData(_selectedMod);
+      modInfo = utils.getModData(_selectedMod!);
     }
     return Scaffold(
       appBar: AppBar(
@@ -91,7 +94,7 @@ class _ModListState extends State<ModList> {
       body: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
-          children: [
+          children: <Widget>[
             if (_selectedMod != null)
               Card(
                 color: Colors.white,
@@ -101,7 +104,7 @@ class _ModListState extends State<ModList> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    children: <Widget>[
                       Text.rich(
                         textAlign: TextAlign.left,
                         softWrap: true,
@@ -111,7 +114,7 @@ class _ModListState extends State<ModList> {
                             fontSize: 18.0,
                             fontWeight: FontWeight.bold,
                           ),
-                          children: [
+                          children: <InlineSpan>[
                             TextSpan(
                               text: modInfo[0],
                               style: const TextStyle(
@@ -131,7 +134,7 @@ class _ModListState extends State<ModList> {
                             fontSize: 18.0,
                             fontWeight: FontWeight.bold,
                           ),
-                          children: [
+                          children: <InlineSpan>[
                             TextSpan(
                               text: modInfo[1],
                               style: const TextStyle(
@@ -151,7 +154,7 @@ class _ModListState extends State<ModList> {
                             fontSize: 18.0,
                             fontWeight: FontWeight.bold,
                           ),
-                          children: [
+                          children: <InlineSpan>[
                             TextSpan(
                               text: modInfo[2],
                               style: const TextStyle(
@@ -171,7 +174,7 @@ class _ModListState extends State<ModList> {
                             fontSize: 18.0,
                             fontWeight: FontWeight.bold,
                           ),
-                          children: [
+                          children: <InlineSpan>[
                             TextSpan(
                               text: modInfo[3],
                               style: const TextStyle(
@@ -193,7 +196,7 @@ class _ModListState extends State<ModList> {
                                 fontSize: 18.0,
                                 fontWeight: FontWeight.bold,
                               ),
-                              children: [
+                              children: <InlineSpan>[
                                 TextSpan(
                                   text: modInfo[5],
                                   style: const TextStyle(
@@ -234,7 +237,7 @@ class _ModListState extends State<ModList> {
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
-              children: [
+              children: <Widget>[
                 if (_selectedMod != null)
                   ElevatedButton(
                     onPressed: utils.runGame,

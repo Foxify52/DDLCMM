@@ -2,7 +2,7 @@ library global;
 
 import 'dart:io';
 
-final modDir = Directory('mod');
-final stagedDir = Directory('staged');
-final storedDir = Directory('stored');
-final gameDir = Directory('staged\\game');
+final Directory modDir = Directory('mod');
+final Directory stagedDir = Directory('staged');
+final Directory storedDir = Directory('stored');
+final Directory gameDir = Directory('staged\\game');
