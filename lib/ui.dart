@@ -2,41 +2,40 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:ddlcmm/utils.dart';
 import 'package:ddlcmm/global.dart' as global;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 
 class ModList extends StatefulWidget {
-  const ModList({super.key});
+  const ModList({Key? key}) : super(key: key);
 
   @override
   State<ModList> createState() => _ModListState();
 }
 
 class _ModListState extends State<ModList> {
-  List<Map<String, dynamic>> _mods = <Map<String, dynamic>>[];
+  late List<Map<String, dynamic>> _mods;
   Map<String, dynamic>? _selectedMod;
-  SharedPreferences? _prefs;
-  final ModUtils utils = ModUtils();
+  late SharedPreferences _prefs;
 
   @override
   void initState() {
     super.initState();
-    _initMods();
+    _mods = <Map<String, dynamic>>[];
+    _initializeMods();
   }
 
-  Future<void> _initMods() async {
-    final List<FileSystemEntity> modFolders = global.modDir.listSync();
-    final List<Map<String, dynamic>> mods = <Map<String, dynamic>>[];
+  Future<void> _initializeMods() async {
+    final Iterable<Directory> modFolders =
+        global.modDir.listSync().whereType<Directory>();
+    _mods = modFolders.map((Directory folder) {
+      final String folderName = folder.path.split('/').last;
+      final File jsonFile = File('$folderName.json');
 
-    for (final FileSystemEntity folder in modFolders) {
-      if (folder is Directory) {
-        final String folderName = folder.path.split('/').last;
-        final File jsonFile = File('$folderName.json');
-
-        if (!jsonFile.existsSync()) {
-          jsonFile.createSync();
-          jsonFile.writeAsStringSync(
+      if (!jsonFile.existsSync()) {
+        jsonFile
+          ..createSync()
+          ..writeAsStringSync(
             json.encode(<String, String>{
               'Name': folderName.replaceAll('mod\\', ''),
               'Description': 'Placeholder',
@@ -46,29 +45,162 @@ class _ModListState extends State<ModList> {
               'Source': '',
             }),
           );
+      }
+      return json.decode(jsonFile.readAsStringSync()) as Map<String, dynamic>;
+    }).toList();
+
+    _prefs = await SharedPreferences.getInstance();
+    final String? savedModName = _prefs.getString('saved');
+    setState(() {
+      _selectedMod = savedModName != null
+          ? _mods.firstWhere(
+              (Map<String, dynamic> mod) => mod['Name'] == savedModName,
+              orElse: () {
+                _prefs.remove('saved');
+                return <String, dynamic>{};
+              },
+            )
+          : null;
+    });
+  }
+
+  void _runGame() {
+    windowManager.hide();
+    try {
+      String exePath =
+          '${Directory.current.path}${Platform.pathSeparator}staged${Platform.pathSeparator}DDLC.exe';
+
+      final Directory stagedDir = Directory(
+        '${Directory.current.path}${Platform.pathSeparator}staged',
+      );
+      if (stagedDir.existsSync()) {
+        List<FileSystemEntity> exeFiles = <FileSystemEntity>[];
+        for (final FileSystemEntity entity in stagedDir.listSync()) {
+          if (entity is File && entity.path.endsWith('.exe')) {
+            exeFiles.add(entity);
+          }
         }
 
-        final Map<String, dynamic> modData =
-            json.decode(jsonFile.readAsStringSync());
-        mods.add(modData);
+        if (exeFiles.isNotEmpty) {
+          exeFiles.sort(
+            (FileSystemEntity a, FileSystemEntity b) =>
+                a.path.length.compareTo(b.path.length),
+          );
+
+          if (exeFiles[0].path.split(Platform.pathSeparator).last !=
+              'DDLC.exe') {
+            exePath = exeFiles[0].path;
+          } else if (exeFiles.length > 1) {
+            exePath = exeFiles[1].path;
+          }
+        }
+      }
+
+      Process.runSync(
+        exePath,
+        <String>[],
+      );
+    } catch (e) {
+      windowManager.show();
+      _showInfoMessage('Error running game: $e');
+    }
+    windowManager.show();
+  }
+
+  List<String> _getModData(Map<String, dynamic> selectedMod) {
+    return selectedMod.values.map((dynamic value) => value.toString()).toList();
+  }
+
+  void _copyMod(String modName) {
+    if (global.stagedDir.existsSync()) {
+      global.stagedDir.deleteSync(recursive: true);
+    }
+    global.gameDir.createSync(recursive: true);
+    final Directory modDir = Directory('mod${Platform.pathSeparator}$modName');
+
+    if (modDir.existsSync()) {
+      bool containsExe = false;
+      for (final FileSystemEntity entity in modDir.listSync()) {
+        if (entity is File && entity.path.endsWith('.exe')) {
+          containsExe = true;
+          break;
+        }
+      }
+
+      if (containsExe) {
+        for (final FileSystemEntity entity
+            in modDir.listSync(recursive: true)) {
+          if (entity is File) {
+            final String relativePath =
+                entity.path.replaceFirst(modDir.path, '');
+            final String newPath = '${global.stagedDir.path}$relativePath';
+            Directory(newPath).parent.createSync(recursive: true);
+            entity.copySync(newPath);
+          }
+        }
+      } else {
+        final Directory? rootModDir = findRootModDir(modDir);
+        if (rootModDir != null) {
+          for (final FileSystemEntity entity
+              in rootModDir.listSync(recursive: true)) {
+            if (entity is File) {
+              final String relativePath =
+                  entity.path.replaceFirst(rootModDir.path, '');
+              final String newPath = '${global.gameDir.path}$relativePath';
+              Directory(newPath).parent.createSync(recursive: true);
+              entity.copySync(newPath);
+            }
+          }
+        } else {
+          _showInfoMessage('Root mod directory not found for $modName.');
+        }
       }
     }
 
-    _prefs = await SharedPreferences.getInstance();
-    final String? savedModName = _prefs!.getString('saved');
+    for (final FileSystemEntity entity
+        in global.storedDir.listSync(recursive: true)) {
+      final String relativePath =
+          entity.path.replaceFirst(global.storedDir.path, '');
+      final String newPath = '${global.stagedDir.path}$relativePath';
 
-    setState(() {
-      _mods = mods;
-      try {
-        if (savedModName != null) {
-          _selectedMod = mods.firstWhere(
-            (Map<String, dynamic> mod) => mod['Name'] == savedModName,
-          );
-        }
-      } catch (e) {
-        _selectedMod = null;
+      if (entity is File && !File(newPath).existsSync()) {
+        entity.copySync(newPath);
+      } else if (entity is Directory) {
+        Directory(newPath).createSync(recursive: true);
       }
-    });
+    }
+  }
+
+  Directory? findRootModDir(Directory modDirectory) {
+    const List<String> extensions = <String>['.rpa', '.rpyc', '.rpy'];
+    try {
+      for (final FileSystemEntity file
+          in modDirectory.listSync(recursive: true)) {
+        if (file is File && extensions.any(file.path.endsWith)) {
+          return file.parent;
+        }
+      }
+    } catch (e) {
+      _showInfoMessage('Error finding root mod directory: $e');
+    }
+    return null;
+  }
+
+  void _showInfoMessage(String message) {
+    final SnackBar snackBar = SnackBar(
+      content: Text(message),
+      duration: const Duration(seconds: 3),
+      backgroundColor: Colors.pink,
+      action: SnackBarAction(
+        label: 'Close',
+        textColor: Colors.white,
+        onPressed: () {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        },
+      ),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
   void _selectMod(Map<String, dynamic> mod) {
@@ -76,16 +208,91 @@ class _ModListState extends State<ModList> {
   }
 
   Future<void> _saveMod() async {
-    await _prefs!.setString('saved', _selectedMod!['Name']);
-    utils.copyMod(_selectedMod!['Name']);
+    if (_selectedMod != null) {
+      await _prefs.setString('saved', _selectedMod!['Name']);
+      _copyMod(_selectedMod!['Name']);
+      _showInfoMessage('Mod installed successfully!');
+    }
+  }
+
+  Widget _buildModCard() {
+    if (_selectedMod == null) return const SizedBox.shrink();
+    final List<String> modInfo = _getModData(_selectedMod!);
+
+    return Card(
+      elevation: 4.0,
+      margin: const EdgeInsets.all(8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            for (final String entry in <String>[
+              'Name',
+              'Description',
+              'Author',
+              'Version',
+            ])
+              _buildRichText(
+                title: '$entry: ',
+                content: modInfo[_getModInfoIndex(entry)],
+              ),
+            if (modInfo[5].isNotEmpty)
+              InkWell(
+                child: _buildRichText(
+                  title: 'Source: ',
+                  content: modInfo[5],
+                  isLink: true,
+                ),
+                onTap: () => launchUrl(Uri.parse(modInfo[5])),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  int _getModInfoIndex(String field) {
+    switch (field) {
+      case 'Name':
+        return 0;
+      case 'Description':
+        return 1;
+      case 'Author':
+        return 2;
+      case 'Version':
+        return 3;
+      default:
+        return -1;
+    }
+  }
+
+  Widget _buildRichText({
+    required String title,
+    required String content,
+    bool isLink = false,
+  }) {
+    return Text.rich(
+      TextSpan(
+        text: title,
+        style: const TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+        children: <InlineSpan>[
+          TextSpan(
+            text: content,
+            style: TextStyle(
+              fontSize: 18.0,
+              fontWeight: FontWeight.normal,
+              color: isLink ? Colors.blue : Colors.black,
+            ),
+          ),
+        ],
+      ),
+      softWrap: true,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    List<String> modInfo = <String>[];
-    if (_selectedMod != null) {
-      modInfo = utils.getModData(_selectedMod!);
-    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('DDLC Mods'),
@@ -95,129 +302,7 @@ class _ModListState extends State<ModList> {
         padding: const EdgeInsets.all(8.0),
         child: Column(
           children: <Widget>[
-            if (_selectedMod != null)
-              Card(
-                color: Colors.white,
-                elevation: 4.0,
-                margin: const EdgeInsets.all(8.0),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text.rich(
-                        textAlign: TextAlign.left,
-                        softWrap: true,
-                        TextSpan(
-                          text: 'Name: ',
-                          style: const TextStyle(
-                            fontSize: 18.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text: modInfo[0],
-                              style: const TextStyle(
-                                fontSize: 18.0,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text.rich(
-                        textAlign: TextAlign.left,
-                        softWrap: true,
-                        TextSpan(
-                          text: 'Description: ',
-                          style: const TextStyle(
-                            fontSize: 18.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text: modInfo[1],
-                              style: const TextStyle(
-                                fontSize: 18.0,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text.rich(
-                        textAlign: TextAlign.left,
-                        softWrap: true,
-                        TextSpan(
-                          text: 'Author: ',
-                          style: const TextStyle(
-                            fontSize: 18.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text: modInfo[2],
-                              style: const TextStyle(
-                                fontSize: 18.0,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text.rich(
-                        textAlign: TextAlign.left,
-                        softWrap: true,
-                        TextSpan(
-                          text: 'Version: ',
-                          style: const TextStyle(
-                            fontSize: 18.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          children: <InlineSpan>[
-                            TextSpan(
-                              text: modInfo[3],
-                              style: const TextStyle(
-                                fontSize: 18.0,
-                                fontWeight: FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (modInfo[5] != '')
-                        InkWell(
-                          child: Text.rich(
-                            textAlign: TextAlign.left,
-                            softWrap: true,
-                            TextSpan(
-                              text: 'Source: ',
-                              style: const TextStyle(
-                                fontSize: 18.0,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              children: <InlineSpan>[
-                                TextSpan(
-                                  text: modInfo[5],
-                                  style: const TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 18.0,
-                                    fontWeight: FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          onTap: () => launchUrl(
-                            Uri.parse(
-                              modInfo[5],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
+            _buildModCard(),
             Expanded(
               child: ListView.builder(
                 itemCount: _mods.length,
@@ -235,20 +320,19 @@ class _ModListState extends State<ModList> {
                 },
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: <Widget>[
-                if (_selectedMod != null)
+            if (_selectedMod != null)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
                   ElevatedButton(
-                    onPressed: utils.runGame,
+                    onPressed: _runGame,
                     style: ElevatedButton.styleFrom(
                       foregroundColor: Colors.white,
                       backgroundColor: Colors.pink,
                     ),
                     child: const Text('Start DDLC'),
                   ),
-                const SizedBox(width: 8.0),
-                if (_selectedMod != null)
+                  const SizedBox(width: 8.0),
                   ElevatedButton(
                     onPressed: _saveMod,
                     style: ElevatedButton.styleFrom(
@@ -257,8 +341,8 @@ class _ModListState extends State<ModList> {
                     ),
                     child: const Text('Install Selected Mod'),
                   ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
